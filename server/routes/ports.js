@@ -1,129 +1,77 @@
+
 const express = require("express");
 const Port = require("../models/Port");
 const { protect } = require("../middleware/auth");
 
 const router = express.Router();
 
-const normalize = (text) => {
-  return String(text || "")
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, " ");
-};
+const normalize = (value) =>
+  String(value || "").trim().replace(/\s+/g, " ");
 
-const escapeRegex = (text) => {
-  return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-};
+const escapeRegex = (value) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/* =========================
-   SEARCH WPI PORTS
-========================= */
-
+// GET /api/ports/search?q=chennai
 router.get("/search", protect, async (req, res) => {
   try {
-    const q = normalize(req.query.q);
+    const query = normalize(req.query.q);
 
-    if (!q) {
+    if (query.length < 2) {
       return res.json([]);
     }
 
-    const searchRegex = escapeRegex(q);
+    const safeQuery = escapeRegex(query);
 
     const ports = await Port.find({
       $or: [
-        {
-          mainPortName: {
-            $regex: searchRegex,
-            $options: "i",
-          },
-        },
-        {
-          alternatePortName: {
-            $regex: searchRegex,
-            $options: "i",
-          },
-        },
-        {
-          unlocode: {
-            $regex: searchRegex,
-            $options: "i",
-          },
-        },
-        {
-          searchNames: {
-            $regex: searchRegex,
-            $options: "i",
-          },
-        },
+        { mainPortName: { $regex: safeQuery, $options: "i" } },
+        { alternatePortName: { $regex: safeQuery, $options: "i" } },
+        { unlocode: { $regex: safeQuery, $options: "i" } },
+        { searchNames: { $regex: safeQuery, $options: "i" } },
       ],
     })
       .select(
         "wpinumber mainPortName alternatePortName unlocode countryCode latitude longitude"
       )
-      .limit(15);
+      .limit(15)
+      .lean();
+
+    console.log(`WPI search "${query}": ${ports.length} results`);
 
     return res.json(ports);
   } catch (error) {
-    console.error("Port search error:", error);
+    console.error("PORT SEARCH ERROR:", error.message);
 
     return res.status(500).json({
-      message: "Failed to search ports",
+      message: "Failed to search WPI ports",
     });
   }
 });
 
-/* =========================
-   FIND NEAREST WPI PORT
-========================= */
-
+// GET /api/ports/nearest?lat=13.08&lng=80.27
 router.get("/nearest", protect, async (req, res) => {
   try {
-    // Accept BOTH formats
-    // ?lat=...
-    // ?lng=...
-    // OR
-    // ?latitude=...
-    // ?longitude=...
-
-    const latitude = Number(
-      req.query.latitude ?? req.query.lat
-    );
-
-    const longitude = Number(
-      req.query.longitude ?? req.query.lng
-    );
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
 
     if (
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude)
+      req.query.lat === undefined ||
+      req.query.lng === undefined ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      lat < -90 ||
+      lat > 90 ||
+      lng < -180 ||
+      lng > 180
     ) {
       return res.status(400).json({
-        message:
-          "Valid latitude and longitude are required",
+        message: "Valid latitude and longitude are required",
       });
     }
 
-    if (
-      latitude < -90 ||
-      latitude > 90 ||
-      longitude < -180 ||
-      longitude > 180
-    ) {
-      return res.status(400).json({
-        message: "Invalid latitude or longitude",
-      });
-    }
-
-    // Get all WPI ports having coordinates
     const ports = await Port.find({
-      latitude: {
-        $ne: null,
-        $exists: true,
-      },
-      longitude: {
-        $ne: null,
-        $exists: true,
-      },
+      latitude: { $gte: lat - 2, $lte: lat + 2 },
+      longitude: { $gte: lng - 2, $lte: lng + 2 },
     })
       .select(
         "wpinumber mainPortName alternatePortName unlocode countryCode latitude longitude"
@@ -132,96 +80,48 @@ router.get("/nearest", protect, async (req, res) => {
 
     if (!ports.length) {
       return res.status(404).json({
-        message:
-          "No WPI ports with coordinates found",
+        message: "No nearby WPI port found",
       });
     }
 
-    const toRadians = (value) => {
-      return (value * Math.PI) / 180;
-    };
-
-    const earthRadius = 6371;
-
-    let nearestPort = null;
+    let nearest = null;
     let nearestDistance = Infinity;
 
     for (const port of ports) {
       const portLat = Number(port.latitude);
       const portLng = Number(port.longitude);
 
-      if (
-        !Number.isFinite(portLat) ||
-        !Number.isFinite(portLng)
-      ) {
+      if (!Number.isFinite(portLat) || !Number.isFinite(portLng)) {
         continue;
       }
 
-      // Haversine distance
-      const dLat = toRadians(
-        portLat - latitude
-      );
-
-      const dLng = toRadians(
-        portLng - longitude
-      );
-
-      const a =
-        Math.sin(dLat / 2) *
-          Math.sin(dLat / 2) +
-        Math.cos(toRadians(latitude)) *
-          Math.cos(toRadians(portLat)) *
-          Math.sin(dLng / 2) *
-          Math.sin(dLng / 2);
-
-      const c =
-        2 *
-        Math.atan2(
-          Math.sqrt(a),
-          Math.sqrt(1 - a)
-        );
-
-      const distance = earthRadius * c;
+      const distance =
+        (portLat - lat) ** 2 + (portLng - lng) ** 2;
 
       if (distance < nearestDistance) {
         nearestDistance = distance;
-        nearestPort = port;
+        nearest = port;
       }
     }
 
-    if (!nearestPort) {
+    if (!nearest) {
       return res.status(404).json({
-        message:
-          "Nearest WPI port could not be found",
+        message: "No nearby WPI port found",
       });
     }
 
-    // Return port fields directly
-    // so Vessels.jsx can use:
-    // result.mainPortName
-
-    return res.json({
-      ...nearestPort,
-      distanceKm: Number(
-        nearestDistance.toFixed(2)
-      ),
-    });
+    return res.json(nearest);
   } catch (error) {
-    console.error(
-      "Nearest port error:",
-      error
-    );
+    console.error("NEAREST PORT ERROR:", error.message);
 
     return res.status(500).json({
-      message: "Failed to find nearest port",
+      message: "Failed to find nearest WPI port",
     });
   }
 });
 
-/* =========================
-   GET PORT BY NAME
-========================= */
-
+// GET /api/ports/:name
+// Keep this route AFTER /search and /nearest.
 router.get("/:name", protect, async (req, res) => {
   try {
     const name = normalize(req.params.name);
@@ -232,30 +132,15 @@ router.get("/:name", protect, async (req, res) => {
       });
     }
 
-    const escapedName = escapeRegex(name);
+    const safeName = escapeRegex(name);
 
     const port = await Port.findOne({
       $or: [
-        {
-          mainPortName: {
-            $regex: `^${escapedName}$`,
-            $options: "i",
-          },
-        },
-        {
-          alternatePortName: {
-            $regex: `^${escapedName}$`,
-            $options: "i",
-          },
-        },
-        {
-          unlocode: {
-            $regex: `^${escapedName}$`,
-            $options: "i",
-          },
-        },
+        { mainPortName: { $regex: `^${safeName}$`, $options: "i" } },
+        { alternatePortName: { $regex: `^${safeName}$`, $options: "i" } },
+        { unlocode: { $regex: `^${safeName}$`, $options: "i" } },
       ],
-    });
+    }).lean();
 
     if (!port) {
       return res.status(404).json({
@@ -265,13 +150,10 @@ router.get("/:name", protect, async (req, res) => {
 
     return res.json(port);
   } catch (error) {
-    console.error(
-      "Get port error:",
-      error
-    );
+    console.error("GET PORT ERROR:", error.message);
 
     return res.status(500).json({
-      message: "Failed to get port",
+      message: "Failed to get WPI port",
     });
   }
 });

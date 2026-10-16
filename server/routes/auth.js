@@ -1,3 +1,4 @@
+
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -8,53 +9,56 @@ const router = express.Router();
 
 // Generate JWT
 const generateToken = (id) => {
-  return jwt.sign(
-    { id },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is not configured");
+  }
+
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: "7d",
+  });
 };
+
+// Normalize email consistently
+const normalizeEmail = (email) =>
+  typeof email === "string" ? email.trim().toLowerCase() : "";
 
 // ==================================================
 // REGISTER
 // POST /api/auth/register
 // ==================================================
-
 router.post("/register", async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password } = req.body || {};
+    const cleanName = typeof name === "string" ? name.trim() : "";
+    const cleanEmail = normalizeEmail(email);
 
-    if (!name || !email || !password) {
+    if (!cleanName || !cleanEmail || typeof password !== "string" || !password) {
       return res.status(400).json({
-        message: "Please provide name, email, and password"
+        message: "Please provide name, email, and password",
       });
     }
 
     if (password.length < 6) {
       return res.status(400).json({
-        message: "Password must be at least 6 characters long"
+        message: "Password must be at least 6 characters long",
       });
     }
 
-    const cleanEmail = email.toLowerCase().trim();
-
-    const existingUser = await User.findOne({
-      email: cleanEmail
-    });
+    const existingUser = await User.findOne({ email: cleanEmail });
 
     if (existingUser) {
-      return res.status(400).json({
-        message: "An account with this email already exists"
+      return res.status(409).json({
+        message: "An account with this email already exists",
       });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
-      name: name.trim(),
+      name: cleanName,
       email: cleanEmail,
       password: hashedPassword,
-      role: "staff"
+      role: "staff",
     });
 
     return res.status(201).json({
@@ -63,16 +67,20 @@ router.post("/register", async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
-
   } catch (error) {
-    console.error("REGISTER ERROR:", error);
+    console.error("REGISTER ERROR:", error.message);
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: "An account with this email already exists",
+      });
+    }
 
     return res.status(500).json({
       message: "Server error during registration",
-      error: error.message
     });
   }
 });
@@ -81,51 +89,50 @@ router.post("/register", async (req, res) => {
 // LOGIN
 // POST /api/auth/login
 // ==================================================
-
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password } = req.body || {};
+    const cleanEmail = normalizeEmail(email);
 
-    if (!email || !password) {
+    if (!cleanEmail || typeof password !== "string" || !password) {
       return res.status(400).json({
-        message: "Please provide email and password"
+        message: "Please provide email and password",
       });
     }
-
-    const cleanEmail = email.toLowerCase().trim();
 
     console.log("LOGIN ATTEMPT:", cleanEmail);
 
+    // Password is select:false in the User schema,
+    // so explicitly include it for password verification.
     const user = await User.findOne({
-      email: cleanEmail
+      email: cleanEmail,
     }).select("+password");
 
     if (!user) {
-      console.log("USER NOT FOUND:", cleanEmail);
+      console.log("LOGIN FAILED: USER NOT FOUND");
 
       return res.status(401).json({
-        message: "Invalid email or password"
+        message: "Invalid email or password",
       });
     }
 
-    console.log("USER FOUND:", user.email);
-    console.log("ROLE:", user.role);
-    console.log("PASSWORD EXISTS:", !!user.password);
+    if (!user.password) {
+      console.error("LOGIN ERROR: User has no stored password hash");
 
-    const isMatch = await bcrypt.compare(
-      password,
-      user.password
-    );
+      return res.status(500).json({
+        message: "Account password is not configured. Contact the administrator.",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
-      console.log("PASSWORD DOES NOT MATCH");
+      console.log("LOGIN FAILED: PASSWORD MISMATCH");
 
       return res.status(401).json({
-        message: "Invalid email or password"
+        message: "Invalid email or password",
       });
     }
-
-    console.log("PASSWORD MATCHED");
 
     const token = generateToken(user._id);
 
@@ -137,16 +144,14 @@ router.post("/login", async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
-
   } catch (error) {
-    console.error("LOGIN ERROR:", error);
+    console.error("LOGIN ERROR:", error.message);
 
     return res.status(500).json({
       message: "Server error during login",
-      error: error.message
     });
   }
 });
@@ -155,7 +160,6 @@ router.post("/login", async (req, res) => {
 // GET CURRENT USER
 // GET /api/auth/me
 // ==================================================
-
 router.get("/me", protect, async (req, res) => {
   try {
     return res.status(200).json({
@@ -163,16 +167,14 @@ router.get("/me", protect, async (req, res) => {
         id: req.user._id,
         name: req.user.name,
         email: req.user.email,
-        role: req.user.role
-      }
+        role: req.user.role,
+      },
     });
-
   } catch (error) {
-    console.error("GET USER ERROR:", error);
+    console.error("GET USER ERROR:", error.message);
 
     return res.status(500).json({
       message: "Server error",
-      error: error.message
     });
   }
 });
@@ -181,43 +183,57 @@ router.get("/me", protect, async (req, res) => {
 // UPDATE PROFILE
 // PUT /api/auth/profile
 // ==================================================
-
 router.put("/profile", protect, async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password } = req.body || {};
 
     const user = await User.findById(req.user._id);
 
     if (!user) {
       return res.status(404).json({
-        message: "User not found"
+        message: "User not found",
       });
     }
 
-    if (email && email.toLowerCase().trim() !== user.email) {
-      const cleanEmail = email.toLowerCase().trim();
-
-      const existingUser = await User.findOne({
-        email: cleanEmail
-      });
-
-      if (existingUser) {
+    if (name !== undefined) {
+      if (typeof name !== "string" || !name.trim()) {
         return res.status(400).json({
-          message: "A user with this email already exists"
+          message: "Name cannot be empty",
         });
       }
 
-      user.email = cleanEmail;
-    }
-
-    if (name) {
       user.name = name.trim();
     }
 
-    if (password) {
-      if (password.length < 6) {
+    if (email !== undefined) {
+      const cleanEmail = normalizeEmail(email);
+
+      if (!cleanEmail) {
         return res.status(400).json({
-          message: "Password must be at least 6 characters long"
+          message: "Please provide a valid email",
+        });
+      }
+
+      if (cleanEmail !== user.email) {
+        const existingUser = await User.findOne({
+          email: cleanEmail,
+          _id: { $ne: user._id },
+        });
+
+        if (existingUser) {
+          return res.status(409).json({
+            message: "A user with this email already exists",
+          });
+        }
+
+        user.email = cleanEmail;
+      }
+    }
+
+    if (password !== undefined && password !== "") {
+      if (typeof password !== "string" || password.length < 6) {
+        return res.status(400).json({
+          message: "Password must be at least 6 characters long",
         });
       }
 
@@ -232,16 +248,20 @@ router.put("/profile", protect, async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        role: user.role
-      }
+        role: user.role,
+      },
     });
-
   } catch (error) {
-    console.error("PROFILE UPDATE ERROR:", error);
+    console.error("PROFILE UPDATE ERROR:", error.message);
+
+    if (error.code === 11000) {
+      return res.status(409).json({
+        message: "A user with this email already exists",
+      });
+    }
 
     return res.status(500).json({
       message: "Server error",
-      error: error.message
     });
   }
 });
