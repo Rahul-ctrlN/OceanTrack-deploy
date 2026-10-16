@@ -20,13 +20,16 @@ export default function Register() {
     setError("");
     setSuccess("");
 
-    if (!name || !email || !password || !confirmPassword) {
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (!cleanName || !cleanEmail || !password || !confirmPassword) {
       setError("Please fill in all fields.");
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(cleanEmail)) {
       setError("Please enter a valid email address.");
       return;
     }
@@ -44,12 +47,14 @@ export default function Register() {
     setLoading(true);
 
     try {
-      await register(name, email, password);
-      setSuccess("Account created successfully! Redirecting to login...");
-      setTimeout(() => navigate("/login"), 1500);
+      const result = await register(cleanName, cleanEmail, password);
+      setSuccess(result.message || "Account created successfully! Redirecting to login...");
+      setTimeout(() => navigate("/login", { replace: true }), 1500);
     } catch (err) {
       const message =
-        err?.response?.data?.message || "Registration failed. Please try again.";
+        err?.response?.data?.message ||
+        err?.message ||
+        "Registration failed. Please try again.";
       setError(message);
     } finally {
       setLoading(false);
@@ -68,13 +73,13 @@ export default function Register() {
         </div>
 
         {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2">
+          <div role="alert" className="mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2">
             {error}
           </div>
         )}
 
         {success && (
-          <div className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-2 flex items-center gap-2">
+          <div role="status" className="mb-4 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-2 flex items-center gap-2">
             <CheckCircle2 size={16} />
             {success}
           </div>
@@ -82,44 +87,58 @@ export default function Register() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+            <label htmlFor="register-name" className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
             <input
+              id="register-name"
               type="text"
+              autoComplete="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              required
               className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent"
               placeholder="John Doe"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+            <label htmlFor="register-email" className="block text-sm font-medium text-slate-700 mb-1">Email</label>
             <input
+              id="register-email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              required
               className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+            <label htmlFor="register-password" className="block text-sm font-medium text-slate-700 mb-1">Password</label>
             <input
+              id="register-password"
               type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
               className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent"
               placeholder="At least 6 characters"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Confirm Password</label>
+            <label htmlFor="register-confirm-password" className="block text-sm font-medium text-slate-700 mb-1">Confirm Password</label>
             <input
+              id="register-confirm-password"
               type="password"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={6}
               className="w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-ocean-500 focus:border-transparent"
               placeholder="Re-enter your password"
             />
