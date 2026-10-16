@@ -7,100 +7,88 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Check existing login when app starts
+  // Validate any saved token when the application starts.
   useEffect(() => {
+    let active = true;
+
     const checkAuth = async () => {
       const token = localStorage.getItem("token");
 
       if (!token) {
-        setLoading(false);
+        if (active) setLoading(false);
         return;
       }
 
       try {
         const response = await api.get("/auth/me");
 
-        setUser(response.data.user);
+        if (active) {
+          setUser(response.data.user);
+          localStorage.setItem("user", JSON.stringify(response.data.user));
+        }
       } catch (error) {
         console.error("Authentication check failed:", error);
 
         localStorage.removeItem("token");
         localStorage.removeItem("user");
-        setUser(null);
+
+        if (active) setUser(null);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     checkAuth();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // LOGIN
+  // LOGIN: throw errors so the login page never treats a failed login as success.
   const login = async (email, password) => {
     try {
       const response = await api.post("/auth/login", {
-        email,
+        email: email.trim(),
         password,
       });
 
-      const { token, user } = response.data;
+      const { token, user } = response.data || {};
 
-      if (!token) {
-        throw new Error("Login succeeded but no token was returned.");
+      if (!token || !user) {
+        throw new Error("The server did not return a valid login response.");
       }
 
-      // THIS IS THE IMPORTANT PART
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
-
       setUser(user);
 
-      return {
-        success: true,
-        user,
-      };
+      return { success: true, user };
     } catch (error) {
       console.error("Login error:", error);
-
-      return {
-        success: false,
-        message:
-          error.response?.data?.message ||
-          error.message ||
-          "Login failed",
-      };
+      throw error;
     }
   };
 
-  // REGISTER
+  // REGISTER: throw errors so the register page only displays success after the API succeeds.
   const register = async (name, email, password) => {
     try {
       const response = await api.post("/auth/register", {
-        name,
-        email,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
         password,
       });
 
       return {
         success: true,
-        message:
-          response.data?.message ||
-          "Account created successfully.",
+        message: response.data?.message || "Account created successfully. Please log in.",
       };
     } catch (error) {
       console.error("Register error:", error);
-
-      return {
-        success: false,
-        message:
-          error.response?.data?.message ||
-          error.message ||
-          "Registration failed",
-      };
+      throw error;
     }
   };
 
-  // LOGOUT
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
