@@ -4,7 +4,6 @@ import { useAuth } from "./context/AuthContext.jsx";
 import Layout from "./components/Layout.jsx";
 
 import Login from "./pages/Login.jsx";
-import Register from "./pages/Register.jsx";
 
 import Dashboard from "./pages/Dashboard.jsx";
 import Vessels from "./pages/Vessels.jsx";
@@ -111,14 +110,10 @@ function App() {
       <Route
         path="/register"
         element={
-          user ? (
-            <Navigate
-              to="/dashboard"
-              replace
-            />
-          ) : (
-            <Register />
-          )
+          <Navigate
+            to={user ? "/dashboard" : "/login"}
+            replace
+          />
         }
       />
 
