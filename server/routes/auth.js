@@ -26,63 +26,10 @@ const normalizeEmail = (email) =>
 // REGISTER
 // POST /api/auth/register
 // ==================================================
-router.post("/register", async (req, res) => {
-  try {
-    const { name, email, password } = req.body || {};
-    const cleanName = typeof name === "string" ? name.trim() : "";
-    const cleanEmail = normalizeEmail(email);
-
-    if (!cleanName || !cleanEmail || typeof password !== "string" || !password) {
-      return res.status(400).json({
-        message: "Please provide name, email, and password",
-      });
-    }
-
-    if (password.length < 6) {
-      return res.status(400).json({
-        message: "Password must be at least 6 characters long",
-      });
-    }
-
-    const existingUser = await User.findOne({ email: cleanEmail });
-
-    if (existingUser) {
-      return res.status(409).json({
-        message: "An account with this email already exists",
-      });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const user = await User.create({
-      name: cleanName,
-      email: cleanEmail,
-      password: hashedPassword,
-      role: "staff",
-    });
-
-    return res.status(201).json({
-      message: "Account created successfully. Please log in.",
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-    });
-  } catch (error) {
-    console.error("REGISTER ERROR:", error.message);
-
-    if (error.code === 11000) {
-      return res.status(409).json({
-        message: "An account with this email already exists",
-      });
-    }
-
-    return res.status(500).json({
-      message: "Server error during registration",
-    });
-  }
+router.post("/register", (req, res) => {
+  return res.status(403).json({
+    message: "Public registration is disabled. Please contact the OceanTrack administrator for an account.",
+  });
 });
 
 // ==================================================
