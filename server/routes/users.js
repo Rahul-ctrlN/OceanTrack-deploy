@@ -43,7 +43,7 @@ router.post("/", async (req, res) => {
       name,
       email: email.toLowerCase(),
       password: hashedPassword,
-      role: role === "admin" ? "admin" : "staff",
+      role: "staff",
     });
 
     return res.status(201).json({
@@ -72,7 +72,9 @@ router.put("/:id", async (req, res) => {
 
     if (name) user.name = name;
     if (email) user.email = email.toLowerCase();
-    if (role) user.role = role === "admin" ? "admin" : "staff";
+    if (user.role === "admin") {
+      return res.status(403).json({ message: "The administrator account cannot be edited here." });
+    }
 
     if (password) {
       const salt = await bcrypt.genSalt(10);
@@ -101,6 +103,10 @@ router.delete("/:id", async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.role === "admin") {
+      return res.status(403).json({ message: "The administrator account cannot be deleted." });
     }
 
     await user.deleteOne();
