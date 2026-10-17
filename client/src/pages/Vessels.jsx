@@ -16,7 +16,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import api from "../services/api.js";
-import { useAuth } from "../context/AuthContext.jsx";
 
 const STATUS_OPTIONS = [
   "Active",
@@ -275,9 +274,6 @@ function getVesselLocation(vessel) {
 }
 
 export default function Vessels() {
-  const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-
   const [vessels, setVessels] = useState([]);
 
   const [loading, setLoading] = useState(true);
@@ -780,16 +776,14 @@ export default function Vessels() {
 
         </div>
 
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="flex items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
-          >
-            <Plus size={18} />
-            Add Vessel
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={openAddModal}
+          className="flex items-center justify-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-700"
+        >
+          <Plus size={18} />
+          Add Vessel
+        </button>
 
       </div>
 
@@ -1121,27 +1115,29 @@ export default function Vessels() {
                             <Eye size={18} />
                           </button>
 
-                          {isAdmin && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => openEditModal(vessel)}
-                                title="Edit"
-                                className="rounded-lg p-2 text-slate-400 transition hover:bg-sky-50 hover:text-sky-600"
-                              >
-                                <Pencil size={18} />
-                              </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openEditModal(
+                                vessel
+                              )
+                            }
+                            title="Edit"
+                            className="rounded-lg p-2 text-slate-400 transition hover:bg-sky-50 hover:text-sky-600"
+                          >
+                            <Pencil size={18} />
+                          </button>
 
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(vessel)}
-                                title="Delete"
-                                className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
-                              >
-                                <Trash2 size={18} />
-                              </button>
-                            </>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleDelete(vessel)
+                            }
+                            title="Delete"
+                            className="rounded-lg p-2 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600"
+                          >
+                            <Trash2 size={18} />
+                          </button>
 
                         </div>
 
@@ -1164,7 +1160,7 @@ export default function Vessels() {
           ADD / EDIT MODAL
       ================================================= */}
 
-      {modalOpen && isAdmin && (
+      {modalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-[2px]">
 
           <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
