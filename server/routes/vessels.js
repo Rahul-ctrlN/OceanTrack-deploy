@@ -1,6 +1,6 @@
 const express = require("express");
 const Vessel = require("../models/Vessel");
-const { protect } = require("../middleware/auth");
+const { protect, adminOnly } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -40,7 +40,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // POST /api/vessels
-router.post("/", async (req, res) => {
+router.post("/", adminOnly, async (req, res) => {
   try {
     const vessel = await Vessel.create(req.body);
 
@@ -54,7 +54,7 @@ router.post("/", async (req, res) => {
 });
 
 // PUT /api/vessels/:id
-router.put("/:id", async (req, res) => {
+router.put("/:id", adminOnly, async (req, res) => {
   try {
     const vessel = await Vessel.findByIdAndUpdate(
       req.params.id,
@@ -81,7 +81,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // DELETE /api/vessels/:id
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", adminOnly, async (req, res) => {
   try {
     const vessel = await Vessel.findById(req.params.id);
 
