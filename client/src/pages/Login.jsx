@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   Anchor,
   Loader2,
@@ -181,10 +181,7 @@ export default function Login() {
 
           <div className="mt-7 pt-6 border-t border-slate-200 text-center">
             <p className="text-sm text-slate-500">
-              Don't have an account?{" "}
-              <Link to="/register" className="font-semibold text-sky-600 hover:text-sky-700 hover:underline">
-                Create Account
-              </Link>
+              Need an account? Contact your OceanTrack administrator.
             </p>
           </div>
 
